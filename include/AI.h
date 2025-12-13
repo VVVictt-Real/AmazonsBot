@@ -6,6 +6,7 @@
 namespace Amazons {
 namespace AI {
 Move think(const Board &board, int myColor);
-}
+int evaluate(const Board &board, int myColor);
+} // namespace AI
 } // namespace Amazons
 #endif
