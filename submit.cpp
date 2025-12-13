@@ -243,7 +243,7 @@ Move think(const Board &board, int myColor) {
 }
 int evaluate(const Board &board, int myColor) {
   int myMoves = Logic::getLegalMoves(board, myColor).size();
-  int opMoves = Logic::getLegalMoves(board, myColor).size();
+  int opMoves = Logic::getLegalMoves(board, -myColor).size();
   return (myMoves - opMoves);
 }
 } // namespace AI
