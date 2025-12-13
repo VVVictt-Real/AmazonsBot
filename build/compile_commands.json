@@ -1,8 +1,0 @@
-[
-{
-  "directory": "/home/vvvictt/AmazonsBot/build",
-  "command": "/usr/bin/c++  -I/home/vvvictt/AmazonsBot/include -std=gnu++17 -o CMakeFiles/main.dir/src/Logic.cpp.o -c /home/vvvictt/AmazonsBot/src/Logic.cpp",
-  "file": "/home/vvvictt/AmazonsBot/src/Logic.cpp",
-  "output": "CMakeFiles/main.dir/src/Logic.cpp.o"
-}
-]

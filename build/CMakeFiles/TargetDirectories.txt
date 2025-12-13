@@ -1,3 +1,0 @@
-/home/vvvictt/AmazonsBot/build/CMakeFiles/main.dir
-/home/vvvictt/AmazonsBot/build/CMakeFiles/edit_cache.dir
-/home/vvvictt/AmazonsBot/build/CMakeFiles/rebuild_cache.dir
