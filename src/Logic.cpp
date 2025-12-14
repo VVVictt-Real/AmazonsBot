@@ -78,5 +78,17 @@ getLegalMoves(const Board &board,
   }
   return moves;
 }
+void undoMove(Board &board, const Move &move, int color) {
+  board.grid[move.arrow.x][move.arrow.y] = EMPTY;
+  board.grid[move.target.x][move.target.y] = EMPTY;
+  board.grid[move.start.x][move.start.y] = color;
+  Point *myPieces =
+      (color == grid_black) ? board.blackPieces : board.whitePieces;
+  for (int i = 0; i < 4; i++)
+    if (myPieces[i] == move.target) {
+      myPieces[i] = move.start;
+      break;
+    }
+}
 } // namespace Logic
 } // namespace Amazons

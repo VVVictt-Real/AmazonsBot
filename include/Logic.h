@@ -2,6 +2,7 @@
 #define LOGIC_H
 
 #include "Defs.h"
+#include <optional>
 #include <vector>
 
 namespace Amazons {
@@ -14,6 +15,7 @@ void applyMove(Board &board, const Move &move,
                int color); // 执行一步，改变棋盘状态
 std::vector<Move> getLegalMoves(const Board &board,
                                 int color); // 获取所有合法走法，返回一个vector
+void undoMove(Board &board, const Move &move, int color);
 
 } // namespace Logic
 } // namespace Amazons
