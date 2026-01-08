@@ -59,13 +59,15 @@ getLegalMoves(const Board &board,
     Point p = pieces[i];
     for (int dir = 0; dir < 8; dir++) {
       for (int step = 1;; ++step) {
-        Point target_p = {p.x + dx[dir] * step, p.y + dy[dir] * step};
+        Point target_p = {static_cast<int8_t>(p.x + dx[dir] * step),
+                          static_cast<int8_t>(p.y + dy[dir] * step)};
         if (!inMap(target_p) || !isEmpty(board, target_p))
           break;
         for (int obsDir = 0; obsDir < 8; ++obsDir) {
           for (int obsStep = 1;; ++obsStep) {
-            Point arrow_p = {target_p.x + dx[obsDir] * obsStep,
-                             target_p.y + dy[obsDir] * obsStep};
+            Point arrow_p = {
+                static_cast<int8_t>(target_p.x + dx[obsDir] * obsStep),
+                static_cast<int8_t>(target_p.y + dy[obsDir] * obsStep)};
             if (!inMap(arrow_p))
               break;
             if (!isEmpty(board, arrow_p) && !(arrow_p == p))

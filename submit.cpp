@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <ctime>
 #include <iostream>
@@ -12,9 +13,11 @@
 #include <queue>
 #include <vector>
 
+
 // ================== Start of include/Defs.h ==================
 #ifndef DEFS_H
 #define DEFS_H
+
 
 namespace Amazons {
 const int GRIDSIZE = 8;
@@ -26,7 +29,7 @@ const int grid_white = -1;
 const int EMPTY = 0;
 
 struct Point {
-  int x, y;
+  int8_t x, y;
   bool operator==(const Point &other) const {
     return x == other.x && y == other.y;
   }
@@ -39,7 +42,7 @@ struct Move {
 };
 
 struct Board {
-  int grid[GRIDSIZE][GRIDSIZE];
+  int8_t grid[GRIDSIZE][GRIDSIZE];
   int turnID;
   Point blackPieces[4];
   Point whitePieces[4];
@@ -53,6 +56,7 @@ struct Board {
 // ================== Start of include/Logic.h ==================
 #ifndef LOGIC_H
 #define LOGIC_H
+
 
 namespace Amazons {
 namespace Logic {
@@ -77,6 +81,7 @@ void undoMove(Board &board, const Move &move, int color);
 #ifndef INTERACTION_H
 #define INTERACTION_H
 
+
 namespace Amazons {
 namespace Interaction {
 int initAndRestore(Board &board);
@@ -91,6 +96,7 @@ void outputMove(const Move &move);
 // ================== Start of include/AI.h ==================
 #ifndef AI_H
 #define AI_H
+
 
 namespace Amazons {
 namespace AI {
@@ -161,13 +167,15 @@ getLegalMoves(const Board &board,
     Point p = pieces[i];
     for (int dir = 0; dir < 8; dir++) {
       for (int step = 1;; ++step) {
-        Point target_p = {p.x + dx[dir] * step, p.y + dy[dir] * step};
+        Point target_p = {static_cast<int8_t>(p.x + dx[dir] * step),
+                          static_cast<int8_t>(p.y + dy[dir] * step)};
         if (!inMap(target_p) || !isEmpty(board, target_p))
           break;
         for (int obsDir = 0; obsDir < 8; ++obsDir) {
           for (int obsStep = 1;; ++obsStep) {
-            Point arrow_p = {target_p.x + dx[obsDir] * obsStep,
-                             target_p.y + dy[obsDir] * obsStep};
+            Point arrow_p = {
+                static_cast<int8_t>(target_p.x + dx[obsDir] * obsStep),
+                static_cast<int8_t>(target_p.y + dy[obsDir] * obsStep)};
             if (!inMap(arrow_p))
               break;
             if (!isEmpty(board, arrow_p) && !(arrow_p == p))
@@ -214,12 +222,16 @@ int initAndRestore(Board &board) {
     if (x0 == -1)
       myColor = grid_black;
     else {
-      Move move = {{x0, y0}, {x1, y1}, {x2, y2}};
+      Move move = {{static_cast<int8_t>(x0), static_cast<int8_t>(y0)},
+                   {static_cast<int8_t>(x1), static_cast<int8_t>(y1)},
+                   {static_cast<int8_t>(x2), static_cast<int8_t>(y2)}};
       Logic::applyMove(board, move, -myColor);
     }
     if (i <= turnID - 1) {
       cin >> x0 >> y0 >> x1 >> y1 >> x2 >> y2;
-      Move move = {{x0, y0}, {x1, y1}, {x2, y2}};
+      Move move = {{static_cast<int8_t>(x0), static_cast<int8_t>(y0)},
+                   {static_cast<int8_t>(x1), static_cast<int8_t>(y1)},
+                   {static_cast<int8_t>(x2), static_cast<int8_t>(y2)}};
       Logic::applyMove(board, move, myColor);
     }
   }
@@ -262,27 +274,29 @@ struct sortableMove {
 // }
 
 void bfs(const Board &board, int (*map)[8], int myColor) {
-  std::queue<Point> q;
+  Point q[100];
   const Point *myPieces =
       (myColor == grid_black) ? board.blackPieces : board.whitePieces;
   memset(map, 0x3f, sizeof(int) * 8 * 8);
   int dx[] = {1, 0, -1, 0, 1, 1, -1, -1};
   int dy[] = {0, 1, 0, -1, 1, -1, 1, -1};
+  int head = 0, tail = 0;
   for (int i = 0; i < 4; i++) {
-    q.push(myPieces[i]);
+    q[tail++] = myPieces[i];
     map[myPieces[i].x][myPieces[i].y] = 0;
   }
-  while (!q.empty()) {
-    Point head = q.front();
-    q.pop();
-    int px = head.x, py = head.y;
+  while (head < tail) {
+    Point top = q[head];
+    head++;
+    int px = top.x, py = top.y;
     int step = map[px][py];
     for (int i = 0; i < 8; i++) {
-      Point temp = {px + dx[i], py + dy[i]};
+      Point temp = {static_cast<int8_t>(px + dx[i]),
+                    static_cast<int8_t>(py + dy[i])};
       if (Logic::inMap(temp) && Logic::isEmpty(board, temp) &&
           map[temp.x][temp.y] == INF) {
         map[temp.x][temp.y] = step + 1;
-        q.push(temp);
+        q[tail++] = temp;
       }
     }
   }

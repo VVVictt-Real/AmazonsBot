@@ -32,27 +32,29 @@ struct sortableMove {
 // }
 
 void bfs(const Board &board, int (*map)[8], int myColor) {
-  std::queue<Point> q;
+  Point q[100];
   const Point *myPieces =
       (myColor == grid_black) ? board.blackPieces : board.whitePieces;
   memset(map, 0x3f, sizeof(int) * 8 * 8);
   int dx[] = {1, 0, -1, 0, 1, 1, -1, -1};
   int dy[] = {0, 1, 0, -1, 1, -1, 1, -1};
+  int head = 0, tail = 0;
   for (int i = 0; i < 4; i++) {
-    q.push(myPieces[i]);
+    q[tail++] = myPieces[i];
     map[myPieces[i].x][myPieces[i].y] = 0;
   }
-  while (!q.empty()) {
-    Point head = q.front();
-    q.pop();
-    int px = head.x, py = head.y;
+  while (head < tail) {
+    Point top = q[head];
+    head++;
+    int px = top.x, py = top.y;
     int step = map[px][py];
     for (int i = 0; i < 8; i++) {
-      Point temp = {px + dx[i], py + dy[i]};
+      Point temp = {static_cast<int8_t>(px + dx[i]),
+                    static_cast<int8_t>(py + dy[i])};
       if (Logic::inMap(temp) && Logic::isEmpty(board, temp) &&
           map[temp.x][temp.y] == INF) {
         map[temp.x][temp.y] = step + 1;
-        q.push(temp);
+        q[tail++] = temp;
       }
     }
   }
