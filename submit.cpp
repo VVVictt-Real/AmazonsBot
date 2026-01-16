@@ -5,16 +5,27 @@
 #include <algorithm>
 #include <cerrno>
 #include <cmath>
+#include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <fstream>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <queue>
+#include <random>
+#include <string>
+#include <tuple>
+#include <type_traits>
 #include <vector>
+#include <windows.h>
+
 
 // ================== Start of include/Defs.h ==================
 #ifndef DEFS_H
 #define DEFS_H
+
 
 namespace Amazons {
 const int GRIDSIZE = 8;
@@ -26,7 +37,7 @@ const int grid_white = -1;
 const int EMPTY = 0;
 
 struct Point {
-  int x, y;
+  int8_t x, y;
   bool operator==(const Point &other) const {
     return x == other.x && y == other.y;
   }
@@ -36,10 +47,14 @@ struct Move {
   Point start;
   Point target;
   Point arrow;
+  bool operator==(const Move &other) const {
+    return start == other.start && target == other.target &&
+           arrow == other.arrow;
+  }
 };
 
 struct Board {
-  int grid[GRIDSIZE][GRIDSIZE];
+  int8_t grid[GRIDSIZE][GRIDSIZE];
   int turnID;
   Point blackPieces[4];
   Point whitePieces[4];
@@ -54,6 +69,7 @@ struct Board {
 #ifndef LOGIC_H
 #define LOGIC_H
 
+
 namespace Amazons {
 namespace Logic {
 
@@ -64,6 +80,7 @@ void applyMove(Board &board, const Move &move,
                int color); // 执行一步，改变棋盘状态
 std::vector<Move> getLegalMoves(const Board &board,
                                 int color); // 获取所有合法走法，返回一个vector
+int countLegalMoves(const Board &board, int color);
 void undoMove(Board &board, const Move &move, int color);
 
 } // namespace Logic
@@ -76,6 +93,7 @@ void undoMove(Board &board, const Move &move, int color);
 // ================== Start of include/Interaction.h ==================
 #ifndef INTERACTION_H
 #define INTERACTION_H
+
 
 namespace Amazons {
 namespace Interaction {
@@ -92,10 +110,19 @@ void outputMove(const Move &move);
 #ifndef AI_H
 #define AI_H
 
+
 namespace Amazons {
 namespace AI {
 Move think(const Board &board, int myColor);
 int evaluate(const Board &board, int myColor);
+int countMobility(const Board &board, int myColor);
+int calQueenTerritory(const Board &board, int myColor,
+                      int myMap[GRIDSIZE][GRIDSIZE],
+                      int opMap[GRIDSIZE][GRIDSIZE]);
+int calTrapPenalty(const Board &board, int myColor,
+                   int myMap[GRIDSIZE][GRIDSIZE],
+                   int opMap[GRIDSIZE][GRIDSIZE]);
+int calPosValue(const Board &board, int myColor);
 int minimax(const Board &board, int depth, bool isMaximizing, int myColor,
             int alpha, int beta);
 } // namespace AI
@@ -103,6 +130,40 @@ int minimax(const Board &board, int depth, bool isMaximizing, int myColor,
 #endif
 
 // ================== End of include/AI.h ==================
+
+// ================== Start of include/UI.h ==================
+#ifndef UI_H
+#define UI_H
+
+
+namespace Amazons {
+class Game {
+public:
+  void run();
+
+private:
+  Board board;
+  int humanColor;
+  int botColor;
+
+  void showMenu();               // 显示主菜单 1
+  void startNewGame();           // 开始新游戏 1
+  void gameLoop(int startColor); // 对战循环 1
+
+  void renderBoard(); // 画棋盘 1
+  bool humanMove();   // 处理玩家输入
+  bool aiMove();      // 处理AI思考
+
+  void saveGame(const std::string &filename);
+  void loadGame(const std::string &filename);
+
+  void clearScreen();
+};
+} // namespace Amazons
+
+#endif
+
+// ================== End of include/UI.h ==================
 
 // ================== Start of src/Logic.cpp ==================
 
@@ -151,9 +212,7 @@ void applyMove(Board &board, const Move &move, int color) {
     }
 }
 
-std::vector<Move>
-getLegalMoves(const Board &board,
-              int color) { // 存在问题：关于被原有的点挡住了的问题
+std::vector<Move> getLegalMoves(const Board &board, int color) {
   std::vector<Move> moves;
   const Point *pieces =
       (color == grid_black) ? board.blackPieces : board.whitePieces;
@@ -161,13 +220,15 @@ getLegalMoves(const Board &board,
     Point p = pieces[i];
     for (int dir = 0; dir < 8; dir++) {
       for (int step = 1;; ++step) {
-        Point target_p = {p.x + dx[dir] * step, p.y + dy[dir] * step};
+        Point target_p = {static_cast<int8_t>(p.x + dx[dir] * step),
+                          static_cast<int8_t>(p.y + dy[dir] * step)};
         if (!inMap(target_p) || !isEmpty(board, target_p))
           break;
         for (int obsDir = 0; obsDir < 8; ++obsDir) {
           for (int obsStep = 1;; ++obsStep) {
-            Point arrow_p = {target_p.x + dx[obsDir] * obsStep,
-                             target_p.y + dy[obsDir] * obsStep};
+            Point arrow_p = {
+                static_cast<int8_t>(target_p.x + dx[obsDir] * obsStep),
+                static_cast<int8_t>(target_p.y + dy[obsDir] * obsStep)};
             if (!inMap(arrow_p))
               break;
             if (!isEmpty(board, arrow_p) && !(arrow_p == p))
@@ -179,6 +240,25 @@ getLegalMoves(const Board &board,
     }
   }
   return moves;
+}
+int countLegalMoves(const Board &board,
+                    int color) { // 较快地计算数量，不考虑射箭，粗略估值
+  int cntMoves = 0;
+  const Point *pieces =
+      (color == grid_black) ? board.blackPieces : board.whitePieces;
+  for (int i = 0; i < 4; i++) {
+    Point p = pieces[i];
+    for (int dir = 0; dir < 8; dir++) {
+      for (int step = 1;; ++step) {
+        Point target_p = {static_cast<int8_t>(p.x + dx[dir] * step),
+                          static_cast<int8_t>(p.y + dy[dir] * step)};
+        if (!inMap(target_p) || !isEmpty(board, target_p))
+          break;
+        cntMoves++;
+      }
+    }
+  }
+  return cntMoves;
 }
 void undoMove(Board &board, const Move &move, int color) {
   board.grid[move.arrow.x][move.arrow.y] = EMPTY;
@@ -214,12 +294,16 @@ int initAndRestore(Board &board) {
     if (x0 == -1)
       myColor = grid_black;
     else {
-      Move move = {{x0, y0}, {x1, y1}, {x2, y2}};
+      Move move = {{static_cast<int8_t>(x0), static_cast<int8_t>(y0)},
+                   {static_cast<int8_t>(x1), static_cast<int8_t>(y1)},
+                   {static_cast<int8_t>(x2), static_cast<int8_t>(y2)}};
       Logic::applyMove(board, move, -myColor);
     }
     if (i <= turnID - 1) {
       cin >> x0 >> y0 >> x1 >> y1 >> x2 >> y2;
-      Move move = {{x0, y0}, {x1, y1}, {x2, y2}};
+      Move move = {{static_cast<int8_t>(x0), static_cast<int8_t>(y0)},
+                   {static_cast<int8_t>(x1), static_cast<int8_t>(y1)},
+                   {static_cast<int8_t>(x2), static_cast<int8_t>(y2)}};
       Logic::applyMove(board, move, myColor);
     }
   }
@@ -250,6 +334,12 @@ struct sortableMove {
     return score > other.score;
   }
 };
+int posTable[8][8] = {
+    {-5, -3, -1, -1, -1, -1, -3, -5}, {-3, 0, 1, 1, 1, 1, 0, -3},
+    {-1, 1, 3, 3, 3, 3, 1, -1},       {-1, 1, 3, 4, 4, 3, 1, -1},
+    {-1, 1, 3, 4, 4, 3, 1, -1},       {-1, 1, 3, 3, 3, 3, 1, -1},
+    {-3, 0, 1, 1, 1, 1, 0, -3},       {-5, -3, -1, -1, -1, -1, -3, -5},
+};
 
 // int calDepth(int moveNum) {
 //   if (moveNum >= 1500)
@@ -261,28 +351,35 @@ struct sortableMove {
 //   return 2;
 // }
 
-void bfs(const Board &board, int (*map)[8], int myColor) {
-  std::queue<Point> q;
+void queenBFS(const Board &board, int (*map)[8], int myColor) {
+  Point q[100];
   const Point *myPieces =
       (myColor == grid_black) ? board.blackPieces : board.whitePieces;
   memset(map, 0x3f, sizeof(int) * 8 * 8);
   int dx[] = {1, 0, -1, 0, 1, 1, -1, -1};
   int dy[] = {0, 1, 0, -1, 1, -1, 1, -1};
+  int head = 0, tail = 0;
   for (int i = 0; i < 4; i++) {
-    q.push(myPieces[i]);
+    q[tail++] = myPieces[i];
     map[myPieces[i].x][myPieces[i].y] = 0;
   }
-  while (!q.empty()) {
-    Point head = q.front();
-    q.pop();
-    int px = head.x, py = head.y;
+  while (head < tail) {
+    Point top = q[head];
+    head++;
+    int px = top.x, py = top.y;
     int step = map[px][py];
     for (int i = 0; i < 8; i++) {
-      Point temp = {px + dx[i], py + dy[i]};
-      if (Logic::inMap(temp) && Logic::isEmpty(board, temp) &&
-          map[temp.x][temp.y] == INF) {
-        map[temp.x][temp.y] = step + 1;
-        q.push(temp);
+      for (int slide = 1;; slide++) {
+        Point temp = {static_cast<int8_t>(px + dx[i] * slide),
+                      static_cast<int8_t>(py + dy[i] * slide)};
+        if (!Logic::inMap(temp))
+          break;
+        if (!Logic::isEmpty(board, temp))
+          break;
+        if (map[temp.x][temp.y] > step + 1) {
+          map[temp.x][temp.y] = step + 1;
+          q[tail++] = temp;
+        }
       }
     }
   }
@@ -296,7 +393,7 @@ Move think(const Board &board, int myColor) {
   Board tempBoard = board;
   for (const auto &m : moves) {
     Logic::applyMove(tempBoard, m, myColor);
-    int score = evaluate(tempBoard, myColor);
+    int score = countMobility(tempBoard, myColor);
     sortablemoves.push_back({{m}, score});
     Logic::undoMove(tempBoard, m, myColor);
   }
@@ -306,9 +403,10 @@ Move think(const Board &board, int myColor) {
   }
   Move bestMove = moves[0];
   // int MAX_DEPTH = calDepth(moves.size());
-  for (int depth = 1; depth <= 4; depth++) {
+  for (int depth = 1; depth <= 20; depth++) {
     int alpha = -1000000, beta = 1000000, currentBestscore = -1000000;
     Move currentBest = bestMove;
+    bool TimeOut = false;
     for (auto it = moves.begin(); it != moves.end(); ++it) {
       Logic::applyMove(tempBoard, *it, myColor);
       int value = minimax(tempBoard, depth - 1, false, myColor, alpha, beta);
@@ -318,46 +416,116 @@ Move think(const Board &board, int myColor) {
         currentBest = *it;
       }
       Logic::undoMove(tempBoard, *it, myColor);
+      double elapsed = (double)(clock() - startTime) / CLOCKS_PER_SEC;
+      if (elapsed > 0.97) {
+        TimeOut = true;
+        break;
+      }
     }
-    bestMove = currentBest;
+    if (!TimeOut)
+      bestMove = currentBest;
+    else
+      break;
     double elapsed = (double)(clock() - startTime) / CLOCKS_PER_SEC;
-    if (elapsed > 0.95)
+    if (elapsed > 0.97)
       break;
   }
   return bestMove;
 }
 
-int evaluate(const Board &board, int myColor) {
-  int myMoves = Logic::getLegalMoves(board, myColor).size();
-  int opMoves = Logic::getLegalMoves(board, -myColor).size();
+int countMobility(const Board &board, int myColor) {
+  int myMoves = Logic::countLegalMoves(board, myColor);
+  int opMoves = Logic::countLegalMoves(board, -myColor);
   return (myMoves - opMoves);
 }
 
-int evaluateTerritory(const Board &board, int myColor) {
-  int mapBlack[8][8], mapWhite[8][8];
-  bfs(board, mapBlack, grid_black);
-  bfs(board, mapWhite, grid_white);
+int calQueenTerritory(const Board &board, int myColor,
+                      int myMap[GRIDSIZE][GRIDSIZE],
+                      int opMap[GRIDSIZE][GRIDSIZE]) {
   int score = 0;
-  for (int i = 0; i < 8; i++) {
-    for (int j = 0; j < 8; j++) {
+  for (int i = 0; i < GRIDSIZE; i++) {
+    for (int j = 0; j < GRIDSIZE; j++) {
       if (board.grid[i][j] != EMPTY)
         continue;
-      if (mapBlack[i][j] < mapWhite[i][j])
-        score++;
-      if (mapBlack[i][j] > mapWhite[i][j])
+      if (myMap[i][j] > opMap[i][j])
         score--;
+      if (myMap[i][j] < opMap[i][j])
+        score++;
     }
   }
-  return myColor == grid_black ? score : -score;
+  return score;
+}
+int calPosValue(const Board &board, int myColor) {
+  int score = 0;
+  const Point *myPieces =
+      (myColor == grid_black) ? board.blackPieces : board.whitePieces;
+  for (int i = 0; i < 4; i++) {
+    score += posTable[myPieces[i].x][myPieces[i].y];
+  }
+  const Point *opPieces =
+      (myColor == grid_black) ? board.whitePieces : board.blackPieces;
+  for (int i = 0; i < 4; i++) {
+    score -= posTable[opPieces[i].x][opPieces[i].y];
+  }
+  return score;
+}
+int calTrapPenalty(const Board &board, int myColor, int (*myMap)[8],
+                   int (*opMap)[8]) {
+  int dx[] = {1, 0, -1, 0, 1, 1, -1, -1};
+  int dy[] = {0, 1, 0, -1, 1, -1, 1, -1};
+  int score = 0;
+  const Point *myPieces =
+      (myColor == grid_black) ? board.blackPieces : board.whitePieces;
+  int penalty[] = {-800, -200, -50, -5, 0, 0, 0, 0, 0};
+  for (int i = 0; i < 4; i++) {
+    Point p = myPieces[i];
+    int liberties = 0;
+    bool exitFlag = false;
+    for (int j = 0; j < 8; j++) {
+      Point temp = {static_cast<int8_t>(p.x + dx[j]),
+                    static_cast<int8_t>(p.y + dy[j])};
+      if (Logic::inMap(temp) && Logic::isEmpty(board, temp)) {
+        liberties++;
+        if (opMap[temp.x][temp.y] > myMap[temp.x][temp.y] + 1)
+          exitFlag = true;
+      }
+    }
+    if (!exitFlag)
+      score += penalty[liberties];
+  }
+  return score;
+}
+int evaluate(const Board &board, int myColor) {
+  int myDist[GRIDSIZE][GRIDSIZE];
+  int opDist[GRIDSIZE][GRIDSIZE];
+  queenBFS(board, myDist, myColor);
+  queenBFS(board, opDist, -myColor);
+  int mobilityScore = countMobility(board, myColor);
+  int territoryScore = calQueenTerritory(board, myColor, myDist, opDist);
+  int myPenaltyScore = calTrapPenalty(board, myColor, myDist, opDist);
+  int opPenaltyScore = calTrapPenalty(board, -myColor, opDist, myDist);
+  int posScore = calPosValue(board, myColor);
+  double w_Mobility, w_Territory, w_Pos;
+  double progress = (board.turnID <= 30) ? (double)board.turnID : 30.0;
+  if (progress > 8.0)
+    w_Pos = 0;
+  else
+    w_Pos = 2.0 - 2.0 * progress / 8.0;
+  w_Territory = 0.1 + (10.0 - 0.1) * progress / 30.0;
+  if (progress < 10.0)
+    w_Mobility = 0.5 + (4.0 - 0.5) * (progress / 10.0);
+  else
+    w_Mobility = 4.0 - (progress - 10.0) / 20.0 * 4.0;
+  double finalScore = (w_Territory * territoryScore) +
+                      (w_Mobility * mobilityScore) + (w_Pos * posScore);
+  finalScore += (myPenaltyScore - opPenaltyScore) / 2.0;
+  return finalScore;
 }
 
 int minimax(const Board &board, int depth, bool isMaximizing, int myColor,
             int alpha, int beta) {
   if (depth == 0) {
-    if (board.turnID > 15)
-      return evaluateTerritory(board, myColor);
-    else
-      return evaluate(board, myColor);
+    return evaluate(board, myColor);
   }
   int currentColor = isMaximizing ? myColor : -myColor;
   std::vector<Move> moves = Logic::getLegalMoves(board, currentColor);
@@ -368,7 +536,7 @@ int minimax(const Board &board, int depth, bool isMaximizing, int myColor,
   Board tempBoard = board;
   for (auto it = moves.begin(); it != moves.end(); ++it) {
     double elapsed = (double)(clock() - startTime) / CLOCKS_PER_SEC;
-    if (elapsed > 0.95)
+    if (elapsed > 0.97)
       return score;
     Logic::applyMove(tempBoard, *it, currentColor);
     int value =
@@ -397,16 +565,288 @@ int minimax(const Board &board, int depth, bool isMaximizing, int myColor,
 
 // ================== End of src/AI.cpp ==================
 
+// ================== Start of src/UI.cpp ==================
+#ifdef _WIN32
+#endif
+
+using namespace std;
+
+namespace Amazons {
+void Game::clearScreen() {
+#ifdef _WIN32
+  system("cls");
+#else
+  system("clear");
+#endif
+}
+
+void Game::run() {
+#ifdef _WIN32
+  SetConsoleOutputCP(65001);
+#endif
+  while (true) {
+    showMenu();
+    int choice;
+    cout << "请输入选项：";
+    if (!(cin >> choice)) {
+      cin.clear();
+      cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    }
+    switch (choice) {
+    case 1:
+      startNewGame();
+      break;
+    case 2:
+      loadGame("saveGame.txt");
+      gameLoop(humanColor);
+      break;
+    case 3:
+      cout << "Goodbye!" << endl;
+      return;
+    default:
+      cout << "无效选项！" << endl;
+      continue;
+    }
+  }
+}
+
+void Game::showMenu() {
+  clearScreen();
+  cout << "\n=========================" << endl;
+  cout << "    亚马逊棋(Amazons)    " << endl;
+  cout << "=========================" << endl;
+  cout << "1.新游戏(New Game)" << endl;
+  cout << "2.加载存档(Load Game)" << endl;
+  cout << "3.结束(Exit)" << endl;
+  cout << "=========================" << endl;
+}
+
+void Game::renderBoard() {
+  clearScreen();
+  cout << "\n当前回合：" << board.turnID << endl;
+  cout << "黑子：B     白子：W     障碍：X" << endl;
+  cout << "你持" << ((humanColor == grid_black) ? "黑(B)" : "白(W)") << "子"
+       << endl;
+  cout << endl;
+  cout << "    0   1   2   3   4   5   6   7  --> y" << endl;
+  cout << "  ┌";
+  for (int i = 0; i < 7; i++)
+    cout << "───┬";
+  cout << "───┐" << endl;
+
+  for (int i = 0; i < 8; ++i) {
+    // 2. 画中间的格子内容: │ . │ B │
+    cout << i << " │"; // 行号 + 左边框
+    for (int j = 0; j < 8; ++j) {
+      int val = board.grid[i][j];
+      char symbol = ' ';
+      if (val == grid_black)
+        symbol = 'B'; // 或者用实心圆 ●
+      else if (val == grid_white)
+        symbol = 'W'; // 或者空心圆 ○
+      else if (val == OBSTACLE)
+        symbol = 'X';
+      else
+        symbol = ' ';
+
+      cout << " " << symbol << " │"; // 棋子 + 右边框
+    }
+    cout << endl;
+
+    // 3. 画行与行之间的分割线
+    if (i < 7) {
+      // 中间行: ├───┼───┤
+      cout << "  ├";
+      for (int k = 0; k < 7; k++)
+        cout << "───┼";
+      cout << "───┤" << endl;
+    } else {
+      // 最后一行底座: └───┴───┘
+      cout << "  └";
+      for (int k = 0; k < 7; k++)
+        cout << "───┴";
+      cout << "───┘" << endl;
+    }
+  }
+  cout << "│" << endl << "│" << endl << "V x" << endl << endl;
+}
+
+void Game::gameLoop(int startColor) {
+  int currentColor = startColor;
+  while (true) {
+    renderBoard();
+    if (currentColor == humanColor) {
+      if (!humanMove())
+        break;
+    } else {
+      if (!aiMove())
+        break;
+    }
+    if (currentColor == grid_white)
+      board.turnID++;
+    currentColor = -currentColor;
+  }
+}
+
+void Game::startNewGame() {
+  Logic::initBoard(board);
+  cout << "你想要选择黑（先手）还是白（后手）？" << endl;
+  cout << "请输入：1(黑) or 2(白)" << endl;
+  int choice;
+  while (true) {
+    while (!(cin >> choice)) {
+      cin.clear();
+      cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    }
+    if (choice == 1 || choice == 2)
+      break;
+    cout << "请输入1或者2！" << endl;
+    cout << "请输入：1(黑) or 2(白)" << endl;
+  }
+  humanColor = (choice == 1) ? grid_black : grid_white;
+  botColor = (choice == 1) ? grid_white : grid_black;
+  gameLoop(grid_black);
+}
+
+bool Game::humanMove() {
+  std::vector<Move> legalMoves = Logic::getLegalMoves(board, humanColor);
+  if (legalMoves.empty()) {
+    cout << "你输了！" << endl;
+    return false;
+  }
+  while (true) {
+    cout << "请输入你的走法：(格式：x1 y1 x2 y2 x3 y3)" << endl;
+    cout << "输入-1：暂停or存盘or退出:";
+    int a[6];
+    bool check = false;
+    for (int i = 0; i < 6; i++) {
+      int temp;
+      while (!(cin >> temp)) {
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+      }
+      if (temp == -1) {
+        cout << "输入：" << endl;
+        cout << "1:存盘并退出" << endl;
+        cout << "2:直接退出" << endl;
+        cout << "3.取消（返回棋局）" << endl;
+        while (!(cin >> temp)) {
+          cin.clear();
+          cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        }
+        if (temp == 1) {
+          saveGame("savegame.txt");
+          return false;
+        }
+        if (temp == 2) {
+          return false;
+        }
+        check = true;
+        break;
+      }
+      a[i] = temp;
+    }
+    if (check) {
+      renderBoard();
+      continue;
+    }
+    Move m = {(int8_t)a[0], (int8_t)a[1], (int8_t)a[2],
+              (int8_t)a[3], (int8_t)a[4], (int8_t)a[5]};
+    if (std::find(legalMoves.begin(), legalMoves.end(), m) !=
+        legalMoves.end()) {
+      Logic::applyMove(board, m, humanColor);
+      return true;
+    } else {
+      cout << "非法落子！请重新输入：";
+    }
+  }
+}
+
+bool Game::aiMove() {
+  cout << "AI正在思考..." << endl;
+  Move m = AI::think(board, botColor);
+  if (m.start.x == -1) {
+    cout << "你赢了！" << endl;
+    return false;
+  }
+  Logic::applyMove(board, m, botColor);
+  cout << "落子：(" << (int)m.start.x << "," << (int)m.start.y << ","
+       << (int)m.target.x << "," << (int)m.target.y << "," << (int)m.arrow.x
+       << "," << (int)m.arrow.y << ")" << endl;
+  cout << "按回车键继续" << endl;
+  cin.ignore();
+  cin.get();
+  return true;
+}
+
+void Game::saveGame(const std::string &filename) {
+  ofstream out;
+  out.open(filename);
+  if (!out) {
+    cerr << "Error:无法保存存档！" << endl;
+    return;
+  }
+  out << board.turnID << endl;
+  out << humanColor << endl;
+  for (int i = 0; i < GRIDSIZE; i++) {
+    for (int j = 0; j < GRIDSIZE; j++) {
+      out<<(int)board.grid[i][j]<<" ";
+      // out << board.grid[i][j] << " ";
+    }
+    out << endl;
+  }
+  cout << "存档成功！" << endl;
+}
+
+void Game::loadGame(const std::string &filename) {
+  ifstream in;
+  in.open(filename);
+  if (!in) {
+    cerr << "无法打开存档" << endl;
+    return;
+  }
+  in >> board.turnID;
+  in >> humanColor;
+  botColor = -humanColor;
+  int countBlack = 0, countWhite = 0;
+  for (int i = 0; i < GRIDSIZE; i++) {
+    for (int j = 0; j < GRIDSIZE; j++) {
+      int temp;
+      in >> temp;
+      board.grid[i][j]=(int8_t)temp;
+      if(temp==grid_black) board.blackPieces[countBlack++] =
+      {(int8_t)i,(int8_t)j}; if(temp==grid_white)
+      board.whitePieces[countWhite++] = {(int8_t)i,(int8_t)j};
+      // board.grid[i][j] = temp;
+      // if (temp == grid_white)
+      //   board.whitePieces[countWhite++] = {i, j};
+      // if (temp == grid_black)
+      //   board.blackPieces[countBlack++] = {i, j};
+    }
+  }
+  cout << "读盘成功" << endl;
+}
+
+} // namespace Amazons
+
+// ================== End of src/UI.cpp ==================
+
 // ================== Start of src/main.cpp ==================
 
 using namespace Amazons;
 
 int main() {
+#ifdef _BOTZONE_ONLINE
   Board board;
   int myColor = Interaction::initAndRestore(board);
   Move move = AI::think(board, myColor);
   Interaction::outputMove(move);
   return 0;
+#else
+  Game game;
+  game.run();
+  return 0;
+#endif // _BOTZONE_ONLINE
 }
 
 // ================== End of src/main.cpp ==================

@@ -16,9 +16,11 @@ MERGE_LIST = [
     "include/Logic.h",
     "include/Interaction.h",
     "include/AI.h",
+    "include/UI.h",
     "src/Logic.cpp",
     "src/Interaction.cpp",
     "src/AI.cpp",
+    "src/UI.cpp",
     "src/main.cpp"
 ]
 
