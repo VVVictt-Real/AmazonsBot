@@ -8,9 +8,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
-#include <random>
 #include <string>
-#include <tuple>
 #include <vector>
 #ifdef _WIN32
 #include <windows.h>
@@ -237,7 +235,7 @@ void Game::saveGame(const std::string &filename) {
   out << humanColor << endl;
   for (int i = 0; i < GRIDSIZE; i++) {
     for (int j = 0; j < GRIDSIZE; j++) {
-      out<<(int)board.grid[i][j]<<" ";
+      out << (int)board.grid[i][j] << " ";
       // out << board.grid[i][j] << " ";
     }
     out << endl;
@@ -260,10 +258,11 @@ void Game::loadGame(const std::string &filename) {
     for (int j = 0; j < GRIDSIZE; j++) {
       int temp;
       in >> temp;
-      board.grid[i][j]=(int8_t)temp;
-      if(temp==grid_black) board.blackPieces[countBlack++] =
-      {(int8_t)i,(int8_t)j}; if(temp==grid_white)
-      board.whitePieces[countWhite++] = {(int8_t)i,(int8_t)j};
+      board.grid[i][j] = (int8_t)temp;
+      if (temp == grid_black)
+        board.blackPieces[countBlack++] = {(int8_t)i, (int8_t)j};
+      if (temp == grid_white)
+        board.whitePieces[countWhite++] = {(int8_t)i, (int8_t)j};
       // board.grid[i][j] = temp;
       // if (temp == grid_white)
       //   board.whitePieces[countWhite++] = {i, j};

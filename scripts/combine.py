@@ -54,10 +54,15 @@ def merge_files():
                     continue
                 
                 # 2. 收集标准库引用 (#include <...>)
-                if stripped.startswith("#include <"):
-                    std_includes.add(stripped)
-                    continue
-                
+                if stripped.startswith("#include <"):
+                    # 如果是 windows.h，什么都不做，让它自然掉落到第4步被写入正文
+                    if "windows.h" in stripped:
+                        pass 
+                    else:
+                        # 如果是普通头文件，提取到顶部，并跳过本次循环
+                        std_includes.add(stripped)
+                        continue
+
                 # 3. 跳过本地引用 (#include "...")
                 # 因为所有代码都合并在一起了，不需要再 include 本地文件
                 if stripped.startswith('#include "'):
