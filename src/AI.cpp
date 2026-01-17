@@ -5,8 +5,6 @@
 #include <cmath>
 #include <cstring>
 #include <ctime>
-#include <queue>
-#include <type_traits>
 #include <vector>
 
 namespace Amazons {

@@ -2,7 +2,6 @@
 #define LOGIC_H
 
 #include "Defs.h"
-#include <optional>
 #include <vector>
 
 namespace Amazons {
