@@ -15,11 +15,9 @@
 #include <string>
 #include <vector>
 
-
 // ================== Start of include/Defs.h ==================
 #ifndef DEFS_H
 #define DEFS_H
-
 
 namespace Amazons {
 const int GRIDSIZE = 8;
@@ -61,7 +59,6 @@ const Move MOVE_LOSE = {-4, -4, -4, -4, -4, -4};
 #ifndef BOARD_H
 #define BOARD_H
 
-
 namespace Amazons {
 class Board {
 private:
@@ -94,7 +91,6 @@ public:
 // ================== Start of include/Player.h ==================
 #ifndef AI_H
 #define AI_H
-
 
 namespace Amazons {
 class Player {
@@ -143,7 +139,6 @@ public:
 #ifndef INTERACTION_H
 #define INTERACTION_H
 
-
 namespace Amazons {
 namespace Interaction {
 int initAndRestore(Board &board);
@@ -158,7 +153,6 @@ void outputMove(const Move &move);
 // ================== Start of include/UI.h ==================
 #ifndef UI_H
 #define UI_H
-
 
 namespace Amazons {
 class Game {
