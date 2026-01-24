@@ -29,13 +29,11 @@ struct Move {
            arrow == other.arrow;
   }
 };
+const Move MOVE_EXIT = {-1, -1, -1, -1, -1, -1};
+const Move MOVE_SAVE = {-2, -2, -2, -2, -2, -2};
+const Move MOVE_NULL = {-3, -3, -3, -3, -3, -3};
+const Move MOVE_LOSE = {-4, -4, -4, -4, -4, -4};
 
-struct Board {
-  int8_t grid[GRIDSIZE][GRIDSIZE];
-  int turnID;
-  Point blackPieces[4];
-  Point whitePieces[4];
-};
 } // namespace Amazons
 
 #endif // !DEFS_H

@@ -1,14 +1,14 @@
-#include "AI.h"
+#include "Board.h"
 #include "Defs.h"
-#include "Logic.h"
+#include "Player.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <ctime>
+#include <iostream>
 #include <vector>
 
 namespace Amazons {
-namespace AI {
 
 const int INF = 0x3f3f3f3f;
 clock_t startTime;
@@ -36,10 +36,9 @@ int posTable[8][8] = {
 //   return 2;
 // }
 
-void queenBFS(const Board &board, int (*map)[8], int myColor) {
+void AIPlayer::queenBFS(const Board &board, int (*map)[8], int isMyself) {
   Point q[100];
-  const Point *myPieces =
-      (myColor == grid_black) ? board.blackPieces : board.whitePieces;
+  const Point *myPieces = board.getPieces(myColor * isMyself);
   memset(map, 0x3f, sizeof(int) * 8 * 8);
   int dx[] = {1, 0, -1, 0, 1, 1, -1, -1};
   int dy[] = {0, 1, 0, -1, 1, -1, 1, -1};
@@ -57,9 +56,9 @@ void queenBFS(const Board &board, int (*map)[8], int myColor) {
       for (int slide = 1;; slide++) {
         Point temp = {static_cast<int8_t>(px + dx[i] * slide),
                       static_cast<int8_t>(py + dy[i] * slide)};
-        if (!Logic::inMap(temp))
+        if (!board.inMap(temp))
           break;
-        if (!Logic::isEmpty(board, temp))
+        if (!board.isEmpty(temp))
           break;
         if (map[temp.x][temp.y] > step + 1) {
           map[temp.x][temp.y] = step + 1;
@@ -69,18 +68,25 @@ void queenBFS(const Board &board, int (*map)[8], int myColor) {
     }
   }
 }
-Move think(const Board &board, int myColor) {
+Move AIPlayer::decideMove(const Board &board) {
+#ifndef _BOTZONE_ONLINE
+  std::cout << "AI正在思考..." << std::endl;
+#endif // !_BOTZONE_ONLINE
   startTime = clock();
-  std::vector<Move> moves = Logic::getLegalMoves(board, myColor);
-  if (moves.empty())
-    return {{-1, -1}, {-1, -1}, {-1, -1}};
+  std::vector<Move> moves = board.getLegalMoves(myColor);
+  if (moves.empty()) {
+#ifndef _BOTZONE_ONLINE
+    std::cout << "你赢了！" << std::endl;
+#endif
+    return MOVE_EXIT;
+  }
   std::vector<sortableMove> sortablemoves;
   Board tempBoard = board;
   for (const auto &m : moves) {
-    Logic::applyMove(tempBoard, m, myColor);
-    int score = countMobility(tempBoard, myColor);
+    tempBoard.applyMove(m, myColor);
+    int score = countMobility(tempBoard);
     sortablemoves.push_back({{m}, score});
-    Logic::undoMove(tempBoard, m, myColor);
+    tempBoard.undoMove(m, myColor);
   }
   std::sort(sortablemoves.begin(), sortablemoves.end());
   for (size_t i = 0; i < sortablemoves.size(); ++i) {
@@ -93,14 +99,14 @@ Move think(const Board &board, int myColor) {
     Move currentBest = bestMove;
     bool TimeOut = false;
     for (auto it = moves.begin(); it != moves.end(); ++it) {
-      Logic::applyMove(tempBoard, *it, myColor);
-      int value = minimax(tempBoard, depth - 1, false, myColor, alpha, beta);
+      tempBoard.applyMove(*it, myColor);
+      int value = minimax(tempBoard, depth - 1, false, alpha, beta);
       if (value > currentBestscore) {
         alpha = value;
         currentBestscore = value;
         currentBest = *it;
       }
-      Logic::undoMove(tempBoard, *it, myColor);
+      tempBoard.undoMove(*it, myColor);
       double elapsed = (double)(clock() - startTime) / CLOCKS_PER_SEC;
       if (elapsed > 0.97) {
         TimeOut = true;
@@ -115,22 +121,32 @@ Move think(const Board &board, int myColor) {
     if (elapsed > 0.97)
       break;
   }
+#ifndef _BOTZONE_ONLINE
+  std::cout << "落子：(" << (int)bestMove.start.x << ","
+            << (int)bestMove.start.y << "," << (int)bestMove.target.x << ","
+            << (int)bestMove.target.y << "," << (int)bestMove.arrow.x << ","
+            << (int)bestMove.arrow.y << ")" << std::endl;
+  std::cout << "按回车键继续" << std::endl;
+  std::cin.ignore();
+  std::cin.get();
+#endif
   return bestMove;
 }
 
-int countMobility(const Board &board, int myColor) {
-  int myMoves = Logic::countLegalMoves(board, myColor);
-  int opMoves = Logic::countLegalMoves(board, -myColor);
+int AIPlayer::countMobility(const Board &board) {
+  int myMoves = board.countLegalMoves(myColor);
+  int opMoves = board.countLegalMoves(-myColor);
   return (myMoves - opMoves);
 }
 
-int calQueenTerritory(const Board &board, int myColor,
-                      int myMap[GRIDSIZE][GRIDSIZE],
-                      int opMap[GRIDSIZE][GRIDSIZE]) {
+int AIPlayer::calQueenTerritory(const Board &board,
+                                int myMap[GRIDSIZE][GRIDSIZE],
+                                int opMap[GRIDSIZE][GRIDSIZE]) {
   int score = 0;
   for (int i = 0; i < GRIDSIZE; i++) {
     for (int j = 0; j < GRIDSIZE; j++) {
-      if (board.grid[i][j] != EMPTY)
+      if (board.getGrid({static_cast<int8_t>(i), static_cast<int8_t>(j)}) !=
+          EMPTY)
         continue;
       if (myMap[i][j] > opMap[i][j])
         score--;
@@ -140,27 +156,24 @@ int calQueenTerritory(const Board &board, int myColor,
   }
   return score;
 }
-int calPosValue(const Board &board, int myColor) {
+int AIPlayer::calPosValue(const Board &board) {
   int score = 0;
-  const Point *myPieces =
-      (myColor == grid_black) ? board.blackPieces : board.whitePieces;
+  const Point *myPieces = board.getPieces(myColor);
   for (int i = 0; i < 4; i++) {
     score += posTable[myPieces[i].x][myPieces[i].y];
   }
-  const Point *opPieces =
-      (myColor == grid_black) ? board.whitePieces : board.blackPieces;
+  const Point *opPieces = board.getPieces(-myColor);
   for (int i = 0; i < 4; i++) {
     score -= posTable[opPieces[i].x][opPieces[i].y];
   }
   return score;
 }
-int calTrapPenalty(const Board &board, int myColor, int (*myMap)[8],
-                   int (*opMap)[8]) {
+int AIPlayer::calTrapPenalty(const Board &board, int isMyself, int (*myMap)[8],
+                             int (*opMap)[8]) {
   int dx[] = {1, 0, -1, 0, 1, 1, -1, -1};
   int dy[] = {0, 1, 0, -1, 1, -1, 1, -1};
   int score = 0;
-  const Point *myPieces =
-      (myColor == grid_black) ? board.blackPieces : board.whitePieces;
+  const Point *myPieces = board.getPieces(myColor * isMyself);
   int penalty[] = {-800, -200, -50, -5, 0, 0, 0, 0, 0};
   for (int i = 0; i < 4; i++) {
     Point p = myPieces[i];
@@ -169,7 +182,7 @@ int calTrapPenalty(const Board &board, int myColor, int (*myMap)[8],
     for (int j = 0; j < 8; j++) {
       Point temp = {static_cast<int8_t>(p.x + dx[j]),
                     static_cast<int8_t>(p.y + dy[j])};
-      if (Logic::inMap(temp) && Logic::isEmpty(board, temp)) {
+      if (board.inMap(temp) && board.isEmpty(temp)) {
         liberties++;
         if (opMap[temp.x][temp.y] > myMap[temp.x][temp.y] + 1)
           exitFlag = true;
@@ -180,18 +193,19 @@ int calTrapPenalty(const Board &board, int myColor, int (*myMap)[8],
   }
   return score;
 }
-int evaluate(const Board &board, int myColor) {
+int AIPlayer::evaluate(const Board &board) {
   int myDist[GRIDSIZE][GRIDSIZE];
   int opDist[GRIDSIZE][GRIDSIZE];
-  queenBFS(board, myDist, myColor);
-  queenBFS(board, opDist, -myColor);
-  int mobilityScore = countMobility(board, myColor);
-  int territoryScore = calQueenTerritory(board, myColor, myDist, opDist);
-  int myPenaltyScore = calTrapPenalty(board, myColor, myDist, opDist);
-  int opPenaltyScore = calTrapPenalty(board, -myColor, opDist, myDist);
-  int posScore = calPosValue(board, myColor);
+  queenBFS(board, myDist, 1);
+  queenBFS(board, opDist, 1);
+  int mobilityScore = countMobility(board);
+  int territoryScore = calQueenTerritory(board, myDist, opDist);
+  int myPenaltyScore = calTrapPenalty(board, 1, myDist, opDist);
+  int opPenaltyScore = calTrapPenalty(board, -1, opDist, myDist);
+  int posScore = calPosValue(board);
   double w_Mobility, w_Territory, w_Pos;
-  double progress = (board.turnID <= 30) ? (double)board.turnID : 30.0;
+  double progress =
+      (board.getTurnID() <= 30) ? (double)board.getTurnID() : 30.0;
   if (progress > 8.0)
     w_Pos = 0;
   else
@@ -207,13 +221,13 @@ int evaluate(const Board &board, int myColor) {
   return finalScore;
 }
 
-int minimax(const Board &board, int depth, bool isMaximizing, int myColor,
-            int alpha, int beta) {
+int AIPlayer::minimax(const Board &board, int depth, bool isMaximizing,
+                      int alpha, int beta) {
   if (depth == 0) {
-    return evaluate(board, myColor);
+    return evaluate(board);
   }
   int currentColor = isMaximizing ? myColor : -myColor;
-  std::vector<Move> moves = Logic::getLegalMoves(board, currentColor);
+  std::vector<Move> moves = board.getLegalMoves(currentColor);
   if (moves.empty()) {
     return isMaximizing ? -1000000 : 1000000;
   }
@@ -223,9 +237,8 @@ int minimax(const Board &board, int depth, bool isMaximizing, int myColor,
     double elapsed = (double)(clock() - startTime) / CLOCKS_PER_SEC;
     if (elapsed > 0.97)
       return score;
-    Logic::applyMove(tempBoard, *it, currentColor);
-    int value =
-        minimax(tempBoard, depth - 1, !isMaximizing, myColor, alpha, beta);
+    tempBoard.applyMove(*it, currentColor);
+    int value = minimax(tempBoard, depth - 1, !isMaximizing, alpha, beta);
     if (isMaximizing) {
       if (value > alpha)
         alpha = value;
@@ -241,9 +254,8 @@ int minimax(const Board &board, int depth, bool isMaximizing, int myColor,
       if (beta <= alpha)
         break;
     }
-    Logic::undoMove(tempBoard, *it, currentColor);
+    tempBoard.undoMove(*it, currentColor);
   }
   return score;
 }
-} // namespace AI
 } // namespace Amazons

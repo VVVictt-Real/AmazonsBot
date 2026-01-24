@@ -1,6 +1,6 @@
 #include "Interaction.h"
+#include "Board.h"
 #include "Defs.h"
-#include "Logic.h"
 #include <cstdint>
 #include <iostream>
 
@@ -11,7 +11,6 @@ namespace Interaction {
 int initAndRestore(Board &board) {
   int turnID;
   cin >> turnID;
-  Logic::initBoard(board);
   int myColor = grid_white;
   for (int i = 1; i <= turnID; i++) {
     int x0, y0, x1, y1, x2, y2;
@@ -22,17 +21,18 @@ int initAndRestore(Board &board) {
       Move move = {{static_cast<int8_t>(x0), static_cast<int8_t>(y0)},
                    {static_cast<int8_t>(x1), static_cast<int8_t>(y1)},
                    {static_cast<int8_t>(x2), static_cast<int8_t>(y2)}};
-      Logic::applyMove(board, move, -myColor);
+      board.applyMove(move, -myColor);
     }
     if (i <= turnID - 1) {
       cin >> x0 >> y0 >> x1 >> y1 >> x2 >> y2;
       Move move = {{static_cast<int8_t>(x0), static_cast<int8_t>(y0)},
                    {static_cast<int8_t>(x1), static_cast<int8_t>(y1)},
                    {static_cast<int8_t>(x2), static_cast<int8_t>(y2)}};
-      Logic::applyMove(board, move, myColor);
+      board.applyMove(move, myColor);
     }
+    if (i != 1)
+      board.addTurnID();
   }
-  board.turnID = turnID;
   return myColor;
 }
 

@@ -1,7 +1,7 @@
 #include "UI.h"
-#include "AI.h"
+#include "Board.h"
 #include "Defs.h"
-#include "Logic.h"
+#include "Player.h"
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
@@ -17,6 +17,13 @@
 using namespace std;
 
 namespace Amazons {
+Game::Game() : blackPlayer(nullptr), whitePlayer(nullptr), humanColor(0) {}
+Game::~Game() {
+  if (blackPlayer)
+    delete blackPlayer;
+  if (whitePlayer)
+    delete whitePlayer;
+}
 void Game::clearScreen() {
 #ifdef _WIN32
   system("cls");
@@ -29,6 +36,8 @@ void Game::run() {
 #ifdef _WIN32
   SetConsoleOutputCP(65001);
 #endif
+  Player *human;
+  Player *AI;
   while (true) {
     showMenu();
     int choice;
@@ -42,7 +51,14 @@ void Game::run() {
       startNewGame();
       break;
     case 2:
-      loadGame("saveGame.txt");
+      humanColor = board.loadBoard("saveGame.txt");
+      if (humanColor == grid_black) {
+        blackPlayer = new humanPlayer(grid_black);
+        whitePlayer = new AIPlayer(grid_white);
+      } else {
+        whitePlayer = new humanPlayer(grid_white);
+        blackPlayer = new AIPlayer(grid_black);
+      }
       gameLoop(humanColor);
       break;
     case 3:
@@ -68,7 +84,7 @@ void Game::showMenu() {
 
 void Game::renderBoard() {
   clearScreen();
-  cout << "\n当前回合：" << board.turnID << endl;
+  cout << "\n当前回合：" << board.getTurnID() << endl;
   cout << "黑子：B     白子：W     障碍：X" << endl;
   cout << "你持" << ((humanColor == grid_black) ? "黑(B)" : "白(W)") << "子"
        << endl;
@@ -83,7 +99,7 @@ void Game::renderBoard() {
     // 2. 画中间的格子内容: │ . │ B │
     cout << i << " │"; // 行号 + 左边框
     for (int j = 0; j < 8; ++j) {
-      int val = board.grid[i][j];
+      int val = board.getGrid({static_cast<int8_t>(i), static_cast<int8_t>(j)});
       char symbol = ' ';
       if (val == grid_black)
         symbol = 'B'; // 或者用实心圆 ●
@@ -120,21 +136,30 @@ void Game::gameLoop(int startColor) {
   int currentColor = startColor;
   while (true) {
     renderBoard();
-    if (currentColor == humanColor) {
-      if (!humanMove())
-        break;
-    } else {
-      if (!aiMove())
-        break;
+    Move m;
+    Player *currentPlayer =
+        (currentColor == grid_black) ? blackPlayer : whitePlayer;
+    m = currentPlayer->decideMove(board);
+    if (m == MOVE_EXIT) {
+      cout << "游戏结束" << endl;
+      break;
     }
+    if (m == MOVE_SAVE) {
+      saveGame("saveGame.txt");
+      cout << "已保存！按回车继续..." << endl;
+      cin.get();
+      cin.get();
+      break;
+    }
+    board.applyMove(m, currentColor);
     if (currentColor == grid_white)
-      board.turnID++;
+      board.addTurnID();
     currentColor = -currentColor;
   }
 }
 
 void Game::startNewGame() {
-  Logic::initBoard(board);
+  board = Board();
   cout << "你想要选择黑（先手）还是白（后手）？" << endl;
   cout << "请输入：1(黑) or 2(白)" << endl;
   int choice;
@@ -149,79 +174,14 @@ void Game::startNewGame() {
     cout << "请输入：1(黑) or 2(白)" << endl;
   }
   humanColor = (choice == 1) ? grid_black : grid_white;
-  botColor = (choice == 1) ? grid_white : grid_black;
+  if (humanColor == grid_black) {
+    blackPlayer = new humanPlayer(grid_black);
+    whitePlayer = new AIPlayer(grid_white);
+  } else {
+    whitePlayer = new humanPlayer(grid_white);
+    blackPlayer = new AIPlayer(grid_black);
+  }
   gameLoop(grid_black);
-}
-
-bool Game::humanMove() {
-  std::vector<Move> legalMoves = Logic::getLegalMoves(board, humanColor);
-  if (legalMoves.empty()) {
-    cout << "你输了！" << endl;
-    return false;
-  }
-  while (true) {
-    cout << "请输入你的走法：(格式：x1 y1 x2 y2 x3 y3)" << endl;
-    cout << "输入-1：暂停or存盘or退出:";
-    int a[6];
-    bool check = false;
-    for (int i = 0; i < 6; i++) {
-      int temp;
-      while (!(cin >> temp)) {
-        cin.clear();
-        cin.ignore(numeric_limits<streamsize>::max(), '\n');
-      }
-      if (temp == -1) {
-        cout << "输入：" << endl;
-        cout << "1:存盘并退出" << endl;
-        cout << "2:直接退出" << endl;
-        cout << "3.取消（返回棋局）" << endl;
-        while (!(cin >> temp)) {
-          cin.clear();
-          cin.ignore(numeric_limits<streamsize>::max(), '\n');
-        }
-        if (temp == 1) {
-          saveGame("savegame.txt");
-          return false;
-        }
-        if (temp == 2) {
-          return false;
-        }
-        check = true;
-        break;
-      }
-      a[i] = temp;
-    }
-    if (check) {
-      renderBoard();
-      continue;
-    }
-    Move m = {(int8_t)a[0], (int8_t)a[1], (int8_t)a[2],
-              (int8_t)a[3], (int8_t)a[4], (int8_t)a[5]};
-    if (std::find(legalMoves.begin(), legalMoves.end(), m) !=
-        legalMoves.end()) {
-      Logic::applyMove(board, m, humanColor);
-      return true;
-    } else {
-      cout << "非法落子！请重新输入：";
-    }
-  }
-}
-
-bool Game::aiMove() {
-  cout << "AI正在思考..." << endl;
-  Move m = AI::think(board, botColor);
-  if (m.start.x == -1) {
-    cout << "你赢了！" << endl;
-    return false;
-  }
-  Logic::applyMove(board, m, botColor);
-  cout << "落子：(" << (int)m.start.x << "," << (int)m.start.y << ","
-       << (int)m.target.x << "," << (int)m.target.y << "," << (int)m.arrow.x
-       << "," << (int)m.arrow.y << ")" << endl;
-  cout << "按回车键继续" << endl;
-  cin.ignore();
-  cin.get();
-  return true;
 }
 
 void Game::saveGame(const std::string &filename) {
@@ -231,11 +191,13 @@ void Game::saveGame(const std::string &filename) {
     cerr << "Error:无法保存存档！" << endl;
     return;
   }
-  out << board.turnID << endl;
+  out << board.getTurnID() << endl;
   out << humanColor << endl;
   for (int i = 0; i < GRIDSIZE; i++) {
     for (int j = 0; j < GRIDSIZE; j++) {
-      out << (int)board.grid[i][j] << " ";
+      out << (int)board.getGrid(
+                 {static_cast<int8_t>(i), static_cast<int8_t>(j)})
+          << " ";
       // out << board.grid[i][j] << " ";
     }
     out << endl;
@@ -244,33 +206,7 @@ void Game::saveGame(const std::string &filename) {
 }
 
 void Game::loadGame(const std::string &filename) {
-  ifstream in;
-  in.open(filename);
-  if (!in) {
-    cerr << "无法打开存档" << endl;
-    return;
-  }
-  in >> board.turnID;
-  in >> humanColor;
-  botColor = -humanColor;
-  int countBlack = 0, countWhite = 0;
-  for (int i = 0; i < GRIDSIZE; i++) {
-    for (int j = 0; j < GRIDSIZE; j++) {
-      int temp;
-      in >> temp;
-      board.grid[i][j] = (int8_t)temp;
-      if (temp == grid_black)
-        board.blackPieces[countBlack++] = {(int8_t)i, (int8_t)j};
-      if (temp == grid_white)
-        board.whitePieces[countWhite++] = {(int8_t)i, (int8_t)j};
-      // board.grid[i][j] = temp;
-      // if (temp == grid_white)
-      //   board.whitePieces[countWhite++] = {i, j};
-      // if (temp == grid_black)
-      //   board.blackPieces[countBlack++] = {i, j};
-    }
-  }
-  cout << "读盘成功" << endl;
+  humanColor = board.loadBoard(filename); // 返回人类玩家的颜色
 }
 
 } // namespace Amazons

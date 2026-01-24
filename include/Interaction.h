@@ -1,6 +1,7 @@
 #ifndef INTERACTION_H
 #define INTERACTION_H
 
+#include "Board.h"
 #include "Defs.h"
 
 namespace Amazons {

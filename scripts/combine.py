@@ -13,13 +13,14 @@ OUTPUT_FILE = "submit.cpp"
 # 3. 被依赖的文件要放在前面
 MERGE_LIST = [
     "include/Defs.h",
-    "include/Logic.h",
+    "include/Board.h",
+    "include/Player.h",
     "include/Interaction.h",
-    "include/AI.h",
     "include/UI.h",
-    "src/Logic.cpp",
-    "src/Interaction.cpp",
+    "src/Board.cpp",
+    "src/Human.cpp",
     "src/AI.cpp",
+    "src/Interaction.cpp",
     "src/UI.cpp",
     "src/main.cpp"
 ]
