@@ -1,2 +1,26 @@
 build/
 .cache/
+# 忽略编译产物
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.out
+
+# 忽略构建目录
+build/
+bin/
+
+# 忽略编辑器/IDE 配置文件
+.vscode/
+.idea/
+*.swp
+*~
+
+# 忽略 compile_commands.json (因为它包含本地绝对路径)
+compile_commands.json
+
+# 忽略 OS 生成的文件
+.DS_Store
+Thumbs.db
